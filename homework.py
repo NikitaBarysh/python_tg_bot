@@ -46,9 +46,10 @@ def send_message(bot, message):
             chat_id=TELEGRAM_CHAT_ID,
             text=message
         )
-    except Exception as error:
-        logging.error(f'Не удалось отправить сообщений в Telegram {error}')
-    else:
+    except Exception:
+        logging.error('Не удалось отправить сообщений в Telegram')
+        raise telegram.error.TelegramError()  # Не мог поставить эту ошибку
+    else:  # в except, т к не проходили бы тесты
         logging.debug('Сообщение в Telegram отправлено')
 
 
@@ -57,12 +58,9 @@ def get_api_answer(timestamp):
     payload = {'from_date': timestamp}
     try:
         response = requests.get(url=ENDPOINT, headers=HEADERS, params=payload)
-    except Exception as error:
-        logging.error(
-            f'Сбой в работе программы: Эндпоинт {ENDPOINT} недоступен. {error}'
-        )
+    except requests.exceptions.HTTPError('Ошибка статуса'):
+        raise exception.UnexpectedStatusError('Неожиданный статус')
     if response.status_code != HTTPStatus.OK:
-        logging.erorr('Код ответа не 200')
         raise exception.UnavailableServer('Сайт недоступен')
     response = response.json()
     return response
@@ -70,8 +68,8 @@ def get_api_answer(timestamp):
 
 def check_response(response):
     """Проверяет ответ API на соответствие документации."""
-    if type(response) is not dict:
-        logging.error('Тип данных ответа - не словарь!')
+    if not isinstance(response, dict):
+        logging.error('Тип данных ответа не словарь!')
         raise TypeError('Ответ вернулся не словарём!')
     try:
         response['homeworks']
@@ -83,14 +81,13 @@ def check_response(response):
         (homework and current_date)
     except KeyError('Какой-то ключи отсутствует'):
         logging.error('Отсутствует один из ключей response')
-    if type(homework) != list:
+    if not isinstance(homework, list):
         raise TypeError('homework не является списком!')
     return homework
 
 
 def parse_status(homework):
     """Проверка полученной домашней работы."""
-    last_verdict = ''
     try:
         homework_name = homework['homework_name']
     except KeyError('homework_name'):
@@ -101,10 +98,6 @@ def parse_status(homework):
         logging.error('Неожиданный статус ДЗ')
         raise exception.UnexpectedStatusError('Неожиданный статус ДЗ')
     verdict = HOMEWORK_VERDICTS.get(status)
-    if verdict == last_verdict:
-        logging.debug(f'Статус не изменился "{verdict}"')
-        raise Exception
-    last_verdict = verdict
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
@@ -116,6 +109,7 @@ def main():
 
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
+    last_mes = ''
 
     while True:
         try:
@@ -127,10 +121,17 @@ def main():
             for homework in homeworks:
                 message = parse_status(homework)
                 send_message(bot, message)
-            timestamp = response.get('current_date')
-
+            timestamp = response.get('current_data', timestamp)
+        except exception.UnexpectedStatusError():
+            logging.error(
+                'Сбой в работе программы: Эндпоинт недоступен.'
+            )
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
+            logging.error(message, exc_info=True)
+            if message != last_mes:
+                send_message(bot, message)
+                message = last_mes
         finally:
             time.sleep(RETRY_PERIOD)
 
