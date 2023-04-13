@@ -48,8 +48,8 @@ def send_message(bot, message):
         )
     except Exception:
         logging.error('Не удалось отправить сообщений в Telegram')
-        raise telegram.error.TelegramError()  # Не мог поставить эту ошибку
-    else:  # в except, т к не проходили бы тесты
+        raise telegram.error.TelegramError()
+    else:
         logging.debug('Сообщение в Telegram отправлено')
 
 
@@ -122,10 +122,8 @@ def main():
                 message = parse_status(homework)
                 send_message(bot, message)
             timestamp = response.get('current_data', timestamp)
-        except exception.UnexpectedStatusError():
-            logging.error(
-                'Сбой в работе программы: Эндпоинт недоступен.'
-            )
+        except telegram.error.TelegramError():
+            logging.error('Не удалось отправить сообщений в Telegram')
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             logging.error(message, exc_info=True)

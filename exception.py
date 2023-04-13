@@ -4,12 +4,6 @@ class UnavailableServer(Exception):
     pass
 
 
-class Telegramerror():
-    """Ошибка с отправкой сообщения в телеграм."""
-
-    pass
-
-
 class UnexpectedStatusError(Exception):
     """Ошибка со статусом работы."""
 
